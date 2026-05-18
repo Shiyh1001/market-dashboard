@@ -191,9 +191,17 @@
   .fa-report-output blockquote { border-left:3px solid var(--text); margin:8px 0; padding:4px 12px; color:var(--text-secondary); background:#fafafa; }
   /* ---- Config ---- */
   .cfg-container { max-width:780px; margin:0 auto; }
-  .cfg-add-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .cfg-add-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; position:relative; }
   .cfg-input { flex:1; min-width:200px; padding:12px 16px; border:1px solid var(--border); border-radius:10px; font-size:14px; background:var(--card-bg); color:var(--text); outline:none; transition:border 0.2s; }
   .cfg-input:focus { border-color:var(--text); }
+  .cfg-search-results { position:absolute; top:48px; left:0; right:0; max-height:260px; overflow-y:auto; background:var(--bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.08); z-index:20; }
+  .cfg-search-item { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; font-size:13px; border-bottom:1px solid #f3f3f3; transition:background 0.1s; }
+  .cfg-search-item:last-child { border-bottom:none; }
+  .cfg-search-item:hover, .cfg-search-item.active { background:#f5f5f5; }
+  .cfg-search-item .s-code { font-family:monospace; font-weight:600; color:var(--text); min-width:60px; }
+  .cfg-search-item .s-name { color:var(--text-secondary); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cfg-search-item .s-mkt { font-size:11px; padding:1px 6px; border-radius:4px; font-weight:600; }
+  .cfg-search-empty { padding:14px; text-align:center; font-size:13px; color:var(--text-secondary); }
   .cfg-btn { padding:12px 28px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
   .cfg-btn:hover { opacity:0.85; }
   .cfg-quick-bar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:24px; }
@@ -703,6 +711,7 @@
     <div class="cfg-container">
       <div class="cfg-add-bar">
         <input type="text" id="cfgStockInput" class="cfg-input" placeholder="输入股票代码或名称，如：300750 / 腾讯 / AAPL" autocomplete="off">
+        <div class="cfg-search-results" id="cfgSearchResults" style="display:none;"></div>
         <button id="cfgAddBtn" class="cfg-btn cfg-btn-add">添加</button>
       </div>
       <div class="cfg-quick-bar">

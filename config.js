@@ -303,6 +303,102 @@ function esc(str) {
   return el.innerHTML;
 }
 
+// ---- Stock Code Search (from cached AI pick list) ----
+var cfgSearchIndex = -1;
+var cfgSearchResults = [];
+
+function cfgSearch(query) {
+  cfgSearchIndex = -1;
+  var el = document.getElementById('cfgSearchResults');
+  if (!el) return;
+  if (!query || query.length < 1) { cfgSearchHide(); return; }
+
+  // Load cached stock list
+  var stocks = [];
+  try {
+    var entry = JSON.parse(localStorage.getItem('sp_stock_list_cache'));
+    if (entry && entry.data) stocks = entry.data;
+  } catch (e) { /* ignore */ }
+
+  if (stocks.length === 0) {
+    el.innerHTML = '<div class="cfg-search-empty">暂无股票列表缓存，请先打开 AI选股 页面加载数据</div>';
+    el.style.display = 'block';
+    return;
+  }
+
+  var q = query.toUpperCase();
+  var matches = [];
+  for (var i = 0; i < stocks.length; i++) {
+    var s = stocks[i];
+    var code = (s.code || s.symbol || '').toUpperCase();
+    var name = (s.name || '').toUpperCase();
+    if (code.indexOf(q) === 0 || name.indexOf(q) !== -1 || code.indexOf(q) !== -1) {
+      matches.push(s);
+      if (matches.length >= 20) break;
+    }
+  }
+
+  if (matches.length === 0) {
+    el.innerHTML = '<div class="cfg-search-empty">未找到匹配的股票</div>';
+    el.style.display = 'block';
+    return;
+  }
+
+  cfgSearchResults = matches;
+  el.style.display = 'block';
+  el.innerHTML = matches.map(function(s, idx) {
+    var code = s.code || s.symbol || '';
+    var name = s.name || '';
+    var mktBadge = cfgMarketBadge(code);
+    return '<div class="cfg-search-item' + (idx === 0 ? ' active' : '') + '" data-idx="' + idx + '">' +
+      mktBadge + '<span class="s-code">' + esc(code) + '</span>' +
+      '<span class="s-name">' + esc(name) + '</span>' +
+      '</div>';
+  }).join('');
+
+  // Bind click
+  el.querySelectorAll('.cfg-search-item').forEach(function(item) {
+    item.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      var idx = parseInt(this.dataset.idx);
+      if (idx >= 0 && idx < cfgSearchResults.length) {
+        cfgSearchSelect(cfgSearchResults[idx]);
+      }
+    });
+  });
+}
+
+function cfgSearchMove(dir) {
+  var items = document.querySelectorAll('.cfg-search-item');
+  if (items.length === 0) return;
+  cfgSearchIndex = Math.min(items.length - 1, Math.max(0, cfgSearchIndex + dir));
+  items.forEach(function(item, i) {
+    item.classList.toggle('active', i === cfgSearchIndex);
+    if (i === cfgSearchIndex) item.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function cfgSearchSelect(stock) {
+  var code = stock.code || stock.symbol || '';
+  var name = stock.name || '';
+  var ok = StockConfig.add(code, name);
+  if (ok) {
+    document.getElementById('cfgStockInput').value = '';
+    cfgSearchHide();
+    cfgRender();
+    cfgToast('已添加 ' + code + ' ' + name);
+  } else {
+    cfgToast('该股票代码已存在：' + code);
+  }
+}
+
+function cfgSearchHide() {
+  var el = document.getElementById('cfgSearchResults');
+  if (el) el.style.display = 'none';
+  cfgSearchResults = [];
+  cfgSearchIndex = -1;
+}
+
 var cfgToastTimer;
 function cfgToast(msg) {
   var el = document.getElementById('cfgToast');
@@ -334,7 +430,20 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('cfgStockInput').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') document.getElementById('cfgAddBtn').click();
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('cfgAddBtn').click(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); cfgSearchMove(1); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); cfgSearchMove(-1); return; }
+    if (e.key === 'Escape') { cfgSearchHide(); return; }
+  });
+
+  document.getElementById('cfgStockInput').addEventListener('input', function() {
+    cfgSearch(this.value.trim());
+  });
+
+  // Click outside to close dropdown
+  document.addEventListener('click', function(e) {
+    var wrap = document.querySelector('.cfg-add-bar');
+    if (wrap && !wrap.contains(e.target)) cfgSearchHide();
   });
 
   // Export
