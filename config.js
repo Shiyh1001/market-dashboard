@@ -339,9 +339,14 @@ function cfgSearch(query) {
   }
 
   if (matches.length === 0) {
-    el.innerHTML = '<div class="cfg-search-empty">未找到匹配的股票</div>';
-    el.style.display = 'block';
-    return;
+    // No cache match — if input looks like a valid code, offer direct add
+    if (/^\d{6}$/.test(query) || /^(SH|SZ|sh|sz)\d{5,8}$/.test(query)) {
+      matches.push({ code: query, name: '', _direct: true });
+    } else {
+      el.innerHTML = '<div class="cfg-search-empty">未找到匹配的股票</div>';
+      el.style.display = 'block';
+      return;
+    }
   }
 
   cfgSearchResults = matches;
@@ -350,9 +355,10 @@ function cfgSearch(query) {
     var code = s.code || s.symbol || '';
     var name = s.name || '';
     var mktBadge = cfgMarketBadge(code);
+    var nameHtml = s._direct ? '<span class="s-name" style="color:var(--text-secondary);font-style:italic;">直接添加此代码</span>' : '<span class="s-name">' + esc(name) + '</span>';
     return '<div class="cfg-search-item' + (idx === 0 ? ' active' : '') + '" data-idx="' + idx + '">' +
       mktBadge + '<span class="s-code">' + esc(code) + '</span>' +
-      '<span class="s-name">' + esc(name) + '</span>' +
+      nameHtml +
       '</div>';
   }).join('');
 

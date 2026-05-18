@@ -312,7 +312,7 @@ function setCachedStockList(data) {
   } catch (e) { /* ignore */ }
 }
 
-var STOCK_LIST_NODES = ['hs_a', 'etf_fund_dz'];
+var STOCK_LIST_NODES = ['hs_a'];
 
 async function fetchStockListPage(page, num, node) {
   var resp = await fetch('/api/stock_list?page=' + page + '&num=' + num + '&sort=symbol&asc=1&node=' + (node || 'hs_a'));
