@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>市场行情仪表盘</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --card-bg: #fafafa; --border: #d3d3d3;
+    --text: #36454f; --text-secondary: #708090;
+    --up: #ef4444; --down: #22c55e; --accent: #36454f;
+    --sidebar-w: 160px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; display: flex;
+  }
+
+  .sidebar {
+    width: var(--sidebar-w); min-height: 100vh; border-right: 1px solid var(--border);
+    padding: 32px 0; display: flex; flex-direction: column;
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; background: var(--bg);
+  }
+  .sidebar .brand { font-size: 16px; font-weight: 700; text-align: center; color: var(--text); margin-bottom: 32px; padding: 0 16px; }
+  .sidebar .nav-item {
+    padding: 12px 24px; font-size: 14px; color: var(--text-secondary); cursor: pointer;
+    border-left: 3px solid transparent; transition: all 0.15s; user-select: none;
+  }
+  .sidebar .nav-item:hover { color: var(--text); background: #f5f5f5; }
+  .sidebar .nav-item.active { color: var(--text); font-weight: 600; border-left-color: var(--text); background: #f5f5f5; }
+
+  .main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; padding: 24px 32px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .header { text-align: center; margin-bottom: 24px; position:relative; }
+  .header h1 { font-weight: 700; font-size: 24px; color: var(--text); }
+  .header .time { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+  .status-bar { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: var(--text-secondary); margin-bottom: 24px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--down); transition: background 0.3s; }
+  .status-dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+  .status-dot.error { background: #ef4444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; max-width: 1200px; margin: 0 auto; }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; position: relative; overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px #36454f22; }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+  .card.sh::before{background:#36454f} .card.sz::before{background:#708090}
+  .card.cy::before{background:#d3d3d3} .card.hsi::before{background:#36454f}
+  .card .market-tag { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; margin-bottom: 10px; color: var(--text-secondary); }
+  .card .price { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .card .change-row { display:flex; gap:12px; align-items:baseline; margin-bottom:14px; }
+  .card .change-num { font-size: 16px; font-weight: 600; }
+  .card .change-pct { font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .up-bg { background: #ef444418; } .down-bg { background: #22c55e18; }
+  .card .detail { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; font-size:12px; color:var(--text-secondary); padding-top:12px; border-top:1px solid var(--border); }
+  .card .detail span { color: var(--text); font-weight: 500; }
+  .card .detail .label { color: var(--text-secondary); font-weight: 400; }
+
+  #kline-panel { max-width: 1200px; margin: 20px auto 0; background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  #kline-panel .kline-head { display:flex; align-items:center; gap:16px; margin-bottom:6px; }
+  #kline-panel .kline-title { font-size:15px; font-weight:600; color:var(--text); }
+  .kline-tabs { display:flex; gap:4px; }
+  .kline-tab { padding:4px 14px; border-radius:6px; font-size:13px; cursor:pointer; background:transparent; color:var(--text-secondary); border:1px solid var(--border); transition:all 0.15s; user-select:none; }
+  .kline-tab.active { background:var(--text); color:#fff; border-color:var(--text); }
+  .kline-tab:hover:not(.active) { color:var(--text); border-color:var(--text); }
+  #kline-panel .kline-sub { font-size:12px; color:var(--text-secondary); margin-bottom:12px; }
+  #kline-chart { width:100%; height:460px; }
+
+  .placeholder { max-width:800px; margin:0 auto; color:var(--text-secondary); text-align:center; padding:60px 20px; }
+  .placeholder .icon { font-size:48px; margin-bottom:16px; }
+
+  .footer { text-align:center; margin-top:24px; font-size:12px; color:var(--text-secondary); }
+
+  @media (max-width:768px) {
+    .sidebar { width:60px; } .sidebar .brand { font-size:12px; }
+    .sidebar .nav-item { padding:12px 10px; font-size:12px; text-align:center; }
+    .main { margin-left:60px; padding:16px; }
+    .grid { grid-template-columns:1fr 1fr; }
+  }
+  /* ---- Alert nav badge ---- */
+  .al-nav-badge {
+    display:inline-block; background:#ef4444; color:#fff; font-size:10px; font-weight:700;
+    min-width:18px; height:18px; line-height:18px; text-align:center; border-radius:9px;
+    margin-left:6px; padding:0 4px; vertical-align:middle;
+  }
+  .al-nav-badge.flash { animation: badgeFlash 0.5s 2; }
+  @keyframes badgeFlash { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  /* ---- Alerts ---- */
+  .al-toolbar { max-width:900px; margin:0 auto 20px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .al-check-btn { padding:10px 24px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.2s; }
+  .al-check-btn:hover { opacity:0.85; } .al-check-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .al-news-btn { background:#fff; color:var(--text); border:1px solid var(--border); }
+  .al-news-btn:hover { background:#f5f5f5; opacity:1; }
+  .al-count { font-size:13px; color:var(--text-secondary); margin-left:4px; }
+  .al-filter-bar { display:flex; gap:4px; margin-left:auto; flex-wrap:wrap; }
+  .al-filter { padding:4px 12px; border-radius:14px; font-size:12px; color:var(--text-secondary); cursor:pointer; border:1px solid transparent; transition:all 0.15s; user-select:none; }
+  .al-filter:hover { color:var(--text); background:#f5f5f5; }
+  .al-filter.active { color:var(--text); background:#f5f5f5; border-color:var(--border); font-weight:600; }
+  .al-clear-btn { padding:8px 16px; background:transparent; border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; }
+  .al-clear-btn:hover { color:#ef4444; border-color:#ef4444; }
+  .al-list { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+  .al-empty { text-align:center; padding:60px 20px; color:var(--text-secondary); font-size:14px; }
+  .al-item { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px 20px; transition:background 0.2s; position:relative; }
+  .al-item.high { border-left:4px solid #ef4444; }
+  .al-item.medium { border-left:4px solid #f59e0b; }
+  .al-item-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .al-type-tag { font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px; }
+  .al-type-volume { background:#f0f0f0; color:var(--text-secondary); }
+  .al-type-amount { background:#f0f0f0; color:var(--text-secondary); }
+  .al-type-price { background:#fef2f2; color:#ef4444; }
+  .al-type-halt { background:#fef2f2; color:#dc2626; }
+  .al-type-news { background:#fff7ed; color:#ea580c; }
+  .al-type-monitor { background:#fefce8; color:#ca8a04; }
+  .al-level-tag { font-size:10px; font-weight:700; padding:1px 6px; border-radius:3px; }
+  .al-level-tag.high { background:#fef2f2; color:#ef4444; }
+  .al-level-tag.medium { background:#fff7ed; color:#f59e0b; }
+  .al-time { font-size:11px; color:var(--text-secondary); margin-left:auto; }
+  .al-item-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px; }
+  .al-item-detail { font-size:12px; color:var(--text-secondary); line-height:1.6; }
+	  .al-dismiss-btn { position:absolute; top:12px; right:16px; background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:16px; padding:2px 6px; border-radius:4px; transition:all 0.15s; }
+	  .al-dismiss-btn:hover { color:#ef4444; background:#fef2f2; }
+  .al-markread-btn { font-size:12px; font-weight:600; border:1px solid #d3d3d3; border-radius:6px; background:#f9f9f9; color:var(--text-secondary); cursor:pointer; padding:3px 12px; transition:all 0.15s; }
+  .al-markread-btn:hover { color:#fff; background:var(--text); border-color:var(--text); }
+  .al-read-tag { font-size:10px; color:var(--text-secondary); }
+  .al-item.al-read { opacity:0.55; }
+  @media (max-width:768px) {
+    .al-filter-bar { margin-left:0; }
+    .al-toolbar { flex-direction:column; align-items:stretch; }
+  }
+  /* ---- Financial Analysis ---- */
+  .fa-search-bar { max-width:720px; margin:0 auto 28px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .fa-input { flex:1; min-width:280px; padding:12px 18px; border:1px solid var(--border); border-radius:10px; font-size:15px; background:var(--card-bg); color:var(--text); outline:none; transition:border 0.2s; }
+  .fa-input:focus { border-color:var(--text); }
+  .fa-btn { padding:12px 28px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
+  .fa-btn:hover { opacity:0.85; } .fa-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .fa-quick-tags { width:100%; display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .fa-tag { padding:4px 12px; border:1px solid var(--border); border-radius:16px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; user-select:none; }
+  .fa-tag:hover { color:var(--text); border-color:var(--text); background:#f5f5f5; }
+  .fa-profile-card { max-width:900px; margin:0 auto 20px; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:24px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:16px; }
+  .fa-company-name { font-size:22px; font-weight:700; color:var(--text); }
+  .fa-company-meta { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+  .fa-dot { margin:0 4px; }
+  .fa-profile-right { display:flex; gap:24px; flex-wrap:wrap; }
+  .fa-val-item { text-align:center; }
+  .fa-val-label { display:block; font-size:11px; color:var(--text-secondary); margin-bottom:2px; }
+  .fa-val { font-size:18px; font-weight:700; color:var(--text); }
+  .fa-metric-grid { max-width:900px; margin:0 auto 20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
+  .fa-metric-card { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .fa-metric-card .metric-label { font-size:11px; color:var(--text-secondary); margin-bottom:4px; }
+  .fa-metric-card .metric-value { font-size:22px; font-weight:700; color:var(--text); }
+  .fa-metric-card .metric-sub { font-size:11px; margin-top:2px; }
+  .fa-metric-card .metric-sub.up { color:var(--up); } .fa-metric-card .metric-sub.down { color:var(--down); }
+  .fa-chart-panel { max-width:900px; margin:0 auto 20px; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:20px; }
+  .fa-chart-title { font-size:15px; font-weight:600; color:var(--text); margin-bottom:12px; }
+  .fa-section { max-width:900px; margin:0 auto 20px; }
+  .fa-section-title { font-size:15px; font-weight:600; color:var(--text); margin-bottom:12px; }
+  .fa-table-wrap { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
+  .fa-table-wrap table { width:100%; border-collapse:collapse; font-size:13px; }
+  .fa-table-wrap th { background:#f5f5f5; padding:10px 14px; text-align:left; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .fa-table-wrap td { padding:10px 14px; border-bottom:1px solid #f0f0f0; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fa-table-wrap tr:last-child td { border-bottom:none; }
+  .fa-news-list { display:flex; flex-direction:column; gap:8px; }
+  .fa-news-item { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:14px 18px; transition:transform 0.15s; }
+  .fa-news-item:hover { transform:translateY(-1px); }
+  .fa-news-item .news-date { font-size:11px; color:var(--text-secondary); }
+  .fa-news-item .news-title { font-size:14px; font-weight:500; color:var(--text); margin-top:4px; line-height:1.5; }
+  .fa-news-item .news-snippet { font-size:12px; color:var(--text-secondary); margin-top:4px; line-height:1.5; }
+  .fa-report-section { max-width:900px; margin:28px auto; text-align:center; }
+  .fa-report-btn { padding:14px 36px; background:var(--text); color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; transition:opacity 0.2s; }
+  .fa-report-btn:hover { opacity:0.85; } .fa-report-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .fa-report-hint { font-size:12px; color:var(--text-secondary); margin-top:8px; }
+  .fa-report-output { margin-top:20px; text-align:left; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:24px; max-height:600px; overflow-y:auto; display:none; }
+  .fa-report-output.show { display:block; }
+  .fa-report-output h1,.fa-report-output h2,.fa-report-output h3 { color:var(--text); margin:16px 0 8px; }
+  .fa-report-output h1 { font-size:18px; } .fa-report-output h2 { font-size:15px; } .fa-report-output h3 { font-size:13px; }
+  .fa-report-output p,.fa-report-output li { font-size:13px; line-height:1.7; color:var(--text-secondary); }
+  .fa-report-output table { width:100%; border-collapse:collapse; font-size:12px; margin:8px 0; }
+  .fa-report-output th,.fa-report-output td { border:1px solid var(--border); padding:6px 10px; text-align:left; }
+  .fa-report-output th { background:#f5f5f5; font-weight:600; }
+  .fa-report-output code { background:#f0f0f0; padding:1px 5px; border-radius:3px; font-size:12px; }
+  .fa-report-output blockquote { border-left:3px solid var(--text); margin:8px 0; padding:4px 12px; color:var(--text-secondary); background:#fafafa; }
+  /* ---- Config ---- */
+  .cfg-container { max-width:780px; margin:0 auto; }
+  .cfg-add-bar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .cfg-input { flex:1; min-width:200px; padding:12px 16px; border:1px solid var(--border); border-radius:10px; font-size:14px; background:var(--card-bg); color:var(--text); outline:none; transition:border 0.2s; }
+  .cfg-input:focus { border-color:var(--text); }
+  .cfg-btn { padding:12px 28px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
+  .cfg-btn:hover { opacity:0.85; }
+  .cfg-quick-bar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:24px; }
+  .cfg-hint { font-size:12px; color:var(--text-secondary); margin-right:4px; }
+  .cfg-section { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+  .cfg-section-header { display:flex; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border); gap:12px; }
+  .cfg-section-title { font-size:15px; font-weight:600; color:var(--text); }
+  .cfg-count { font-size:13px; color:var(--text-secondary); }
+  .cfg-actions { margin-left:auto; display:flex; gap:8px; }
+  .cfg-btn-sm { padding:6px 16px; border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text-secondary); background:transparent; cursor:pointer; transition:all 0.15s; }
+  .cfg-btn-sm:hover { color:var(--text); border-color:var(--text); background:#f5f5f5; }
+  .cfg-btn-danger:hover { color:#ef4444; border-color:#ef4444; background:#fef2f2; }
+  .cfg-table-wrap { overflow-x:auto; }
+  .cfg-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
+  .cfg-table th { background:#f5f5f5; padding:8px 10px; text-align:left; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .cfg-table td { padding:8px 10px; border-bottom:1px solid #f0f0f0; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cfg-table tr:last-child td { border-bottom:none; }
+  .cfg-table .cfg-empty { text-align:center; color:var(--text-secondary); padding:32px; white-space:normal; }
+  .cfg-table .cfg-code { font-weight:600; font-family:monospace; }
+  .cfg-table .cfg-del { color:#ef4444; cursor:pointer; border:none; background:none; font-size:12px; padding:4px 8px; border-radius:4px; transition:background 0.15s; }
+  .cfg-table .cfg-del:hover { background:#fef2f2; }
+  .cfg-cache-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .cfg-cache-badge.cached { background:#22c55e18; color:#22c55e; }
+  .cfg-cache-badge.uncached { background:#f0f0f0; color:var(--text-secondary); }
+  .cfg-table td:last-child { overflow:visible; text-overflow:clip; white-space:nowrap; }
+  .cfg-table td:last-child button { white-space:nowrap; flex-shrink:0; }
+  .cfg-table .cfg-cache-now { color:var(--text-secondary); cursor:pointer; border:none; background:none; font-size:11px; padding:2px 6px; border-radius:4px; transition:all 0.15s; }
+  .cfg-table .cfg-cache-now:hover { color:var(--text); background:#f5f5f5; }
+  .cfg-table tbody tr:nth-child(even) { background:#fafafa; }
+  .cfg-table tbody tr:hover { background:#f5f5f5; }
+  .cfg-mkt-badge { display:inline-block; width:18px; height:18px; line-height:18px; text-align:center; border-radius:3px; font-size:10px; font-weight:700; margin-right:6px; vertical-align:middle; }
+  .cfg-mkt-badge.mkt-sh { background:#eef2ff; color:#4f46e5; }
+  .cfg-mkt-badge.mkt-sz { background:#fef2f2; color:#dc2626; }
+  .cfg-mkt-badge.mkt-hk { background:#ecfdf5; color:#059669; }
+  .cfg-mkt-badge.mkt-us { background:#fefce8; color:#ca8a04; }
+  .cfg-toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:var(--text); color:#fff; padding:10px 24px; border-radius:10px; font-size:13px; z-index:100; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+  .cfg-toast.show { opacity:1; }
+  .cfg-usage { margin-top:24px; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:20px; }
+  .cfg-usage-title { font-size:14px; font-weight:600; color:var(--text); margin-bottom:10px; }
+  .cfg-usage ul { margin:0; padding-left:20px; }
+  .cfg-usage li { font-size:13px; color:var(--text-secondary); line-height:2; }
+  .cfg-usage code { background:#f0f0f0; padding:1px 6px; border-radius:4px; font-size:12px; }
+  @media (max-width:768px) {
+    .cfg-add-bar { flex-direction:column; }
+    .cfg-section-header { flex-wrap:wrap; }
+    .cfg-actions { margin-left:0; }
+  }
+  /* ---- Technical Analysis ---- */
+  .ta-search-bar { max-width:900px; margin:0 auto 24px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .ta-input { flex:1; min-width:240px; padding:12px 18px; border:1px solid var(--border); border-radius:10px; font-size:15px; background:var(--card-bg); color:var(--text); outline:none; transition:border 0.2s; }
+  .ta-input:focus { border-color:var(--text); }
+  .ta-btn { padding:12px 28px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; transition:opacity 0.2s; white-space:nowrap; }
+  .ta-btn:hover { opacity:0.85; } .ta-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .ta-quick-tags { width:100%; display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .ta-tag { padding:4px 12px; border:1px solid var(--border); border-radius:16px; font-size:12px; color:var(--text-secondary); cursor:pointer; transition:all 0.15s; user-select:none; }
+  .ta-tag:hover { color:var(--text); border-color:var(--text); background:#f5f5f5; }
+  .ta-tag.active { background:var(--text); color:#fff; border-color:var(--text); }
+	  .ta-recommendation { max-width:900px; margin:0 auto 20px; padding:20px 24px; border-radius:12px; display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+	  .ta-recommendation.strong-buy { background:linear-gradient(135deg,rgba(34,197,94,0.18),rgba(34,197,94,0.04)); border:2px solid #22c55e; }
+	  .ta-recommendation.buy { background:linear-gradient(135deg,rgba(34,197,94,0.10),rgba(34,197,94,0.03)); border:2px solid rgba(34,197,94,0.55); }
+	  .ta-recommendation.hold { background:linear-gradient(135deg,rgba(245,158,11,0.10),rgba(245,158,11,0.03)); border:2px solid rgba(245,158,11,0.55); }
+	  .ta-recommendation.sell { background:linear-gradient(135deg,rgba(239,68,68,0.10),rgba(239,68,68,0.03)); border:2px solid rgba(239,68,68,0.55); }
+	  .ta-recommendation.strong-sell { background:linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.04)); border:2px solid #ef4444; }
+	  .ta-rec-main { flex-shrink:0; text-align:center; min-width:120px; }
+	  .ta-rec-label { font-size:13px; font-weight:600; color:var(--text-secondary); }
+	  .ta-rec-value { font-size:28px; font-weight:800; }
+	  .ta-rec-value.strong-buy { color:#16a34a; }
+	  .ta-rec-value.buy { color:#22c55e; }
+	  .ta-rec-value.hold { color:#d97706; }
+	  .ta-rec-value.sell { color:#ef4444; }
+	  .ta-rec-value.strong-sell { color:#dc2626; }
+	  .ta-rec-confidence { font-size:13px; color:var(--text-secondary); margin-top:2px; }
+	  .ta-rec-confidence span { font-weight:700; }
+	  .ta-rec-breakdown { display:flex; gap:16px; flex-wrap:wrap; }
+	  .ta-rec-item { text-align:center; min-width:48px; }
+	  .ta-rec-item .rlabel { font-size:11px; color:var(--text-secondary); margin-bottom:2px; }
+	  .ta-rec-item .rscore { font-size:14px; font-weight:700; }
+	  .ta-rec-item .rscore.bullish { color:#22c55e; }
+	  .ta-rec-item .rscore.bearish { color:#ef4444; }
+	  .ta-rec-item .rscore.neutral { color:var(--text-secondary); }
+
+  .ta-signals { max-width:900px; margin:0 auto 16px; display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .ta-signal-card { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:12px 16px; text-align:center; transition:transform 0.15s; }
+  .ta-signal-card:hover { transform:translateY(-1px); }
+  .ta-signal-label { font-size:11px; color:var(--text-secondary); margin-bottom:4px; font-weight:600; }
+  .ta-signal-value { font-size:14px; font-weight:700; color:var(--text); }
+  .ta-signal-value.bullish { color:var(--up); }
+  .ta-signal-value.bearish { color:var(--down); }
+  .ta-signal-value.neutral { color:var(--text-secondary); }
+  .ta-stock-info { max-width:900px; margin:0 auto 20px; display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:0 4px; }
+  .ta-stock-name { font-size:20px; font-weight:700; color:var(--text); }
+  .ta-stock-code { font-size:13px; color:var(--text-secondary); font-family:monospace; }
+  .ta-stock-price { font-size:24px; font-weight:700; color:var(--text); }
+  .ta-stock-change { font-size:16px; font-weight:600; padding:2px 10px; border-radius:6px; }
+  .ta-empty { max-width:500px; margin:40px auto; text-align:center; color:var(--text-secondary); padding:60px 20px; }
+  .ta-empty .icon { font-size:48px; margin-bottom:12px; }
+  #taChartPanel { max-width:1000px; margin:0 auto; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:16px; overflow:hidden; }
+  @media (max-width:768px) {
+    .ta-search-bar { flex-direction:column; align-items:stretch; }
+    .ta-signals { grid-template-columns:repeat(3, 1fr); }
+    #taChart { height:600px; }
+  }
+
+  /* ---- AI Stock Pick ---- */
+  .sp-filter-bar { max-width:1100px; margin:0 auto 16px; display:flex; flex-direction:column; gap:10px; }
+  .sp-filter-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sp-filter-label { font-size:12px; color:var(--text-secondary); font-weight:600; white-space:nowrap; }
+  .sp-industry-toggle { cursor:pointer; user-select:none; }
+  .sp-industry-toggle:hover { color:var(--text); }
+  .sp-industry-list { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sp-industry-list.open { display:inline-flex !important; }
+  .sp-filter { padding:4px 12px; border-radius:14px; font-size:12px; color:var(--text-secondary); cursor:pointer; border:1px solid transparent; transition:all 0.15s; user-select:none; }
+  .sp-filter:hover { color:var(--text); background:#f5f5f5; }
+  .sp-filter.active { color:var(--text); background:#f5f5f5; border-color:var(--border); font-weight:600; }
+  .sp-action-bar { max-width:1100px; margin:0 auto 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .sp-btn { padding:10px 28px; background:var(--text); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.2s; }
+  .sp-btn:hover { opacity:0.85; } .sp-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .sp-count { font-size:13px; color:var(--text-secondary); }
+  .sp-hint { font-size:12px; color:var(--text-secondary); }
+  .sp-progress-wrap { max-width:500px; margin:0 auto 8px; background:#f0f0f0; border-radius:8px; height:8px; overflow:hidden; }
+  .sp-progress-bar { height:100%; background:var(--text); border-radius:8px; transition:width 0.3s; width:0%; }
+  .sp-progress-text { text-align:center; font-size:13px; color:var(--text-secondary); margin-top:8px; }
+  .sp-empty { max-width:500px; margin:40px auto; text-align:center; color:var(--text-secondary); padding:60px 20px; }
+  .sp-empty .icon { font-size:48px; margin-bottom:12px; }
+  .sp-results { max-width:1100px; margin:0 auto; }
+  .sp-results-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .sp-results-title { font-size:15px; font-weight:600; color:var(--text); }
+  .sp-grade { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; }
+  .sp-grade-S { background:#fef2f2; color:#dc2626; }
+  .sp-grade-A { background:#fff7ed; color:#ea580c; }
+  .sp-grade-B { background:#fefce8; color:#ca8a04; }
+  .sp-grade-C { background:#f0f0f0; color:var(--text-secondary); }
+  .sp-factor-tags { font-size:11px; color:var(--text-secondary); line-height:1.8; }
+  .sp-factor-tags span { display:inline-block; padding:1px 6px; border-radius:3px; margin-right:3px; }
+  .sp-factor-tags .sp-pos { background:#22c55e14; color:#16a34a; }
+  .sp-factor-tags .sp-neg { background:#ef444414; color:#ef4444; }
+  .sp-score-pos { color:var(--up); font-weight:600; }
+  .sp-add-wl-btn { padding:3px 8px; font-size:11px; border:1px solid var(--border); border-radius:4px; background:#fff; color:var(--text); cursor:pointer; white-space:nowrap; }
+  .sp-add-wl-btn:hover { background:#f5f5f5; border-color:var(--text); }
+
+  .sp-guide-trigger { position:absolute; top:16px; right:16px; font-size:12px; color:var(--text-secondary); cursor:pointer; padding:4px 10px; border:1px solid var(--border); border-radius:6px; user-select:none; }
+  .sp-guide-trigger:hover { color:var(--text); background:#f5f5f5; }
+  .sp-guide-dropdown { display:none; position:absolute; top:44px; right:16px; z-index:100; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.12); padding:14px 16px; min-width:580px; max-width:640px; }
+  .sp-guide-dropdown.show { display:block; }
+  .sp-guide-table { width:100%; font-size:11px; border-collapse:collapse; }
+  .sp-guide-table th { padding:4px 6px; text-align:left; font-weight:600; color:var(--text-secondary); border-bottom:1px solid var(--border); white-space:nowrap; }
+  .sp-guide-table td { padding:4px 6px; border-bottom:1px solid #f0f0f0; color:var(--text); }
+  .sp-guide-table tbody tr:hover { background:#fafafa; }
+  .sp-guide-plus { color:#16a34a; font-weight:600; }
+  .sp-guide-minus { color:#ef4444; font-weight:600; }
+  .sp-guide-grade { margin-top:10px; display:flex; align-items:center; gap:8px; font-size:11px; }
+
+  .sp-factor-cell { position:relative; cursor:default; }
+  .sp-factor-more { font-size:10px; color:var(--text-secondary); cursor:pointer; }
+  .sp-factor-tip { display:none; position:absolute; bottom:100%; left:0; z-index:50; background:var(--card-bg); border:1px solid var(--border); border-radius:6px; padding:6px 8px; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.1); font-size:11px; }
+  .sp-factor-cell:hover .sp-factor-tip { display:block; }
+
+  .sp-more-btn { padding:6px 20px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--card-bg); color:var(--text-secondary); cursor:pointer; }
+  .sp-more-btn:hover { color:var(--text); border-color:var(--text); }
+  .sp-score-neg { color:var(--down); }
+  .sp-results td:last-child { overflow:visible; text-overflow:clip; }
+  .sp-results th:last-child, .sp-results td:last-child { position:sticky; right:0; z-index:2; background:var(--card-bg); }
+  .sp-results th:last-child { background:#f5f5f5; }
+  .sp-results td:last-child::before { content:''; position:absolute; left:0; top:0; bottom:0; width:1px; background:var(--border); }
+  .sp-results th:last-child::before { content:''; position:absolute; left:0; top:0; bottom:0; width:1px; background:var(--border); }
+  .sp-results .fa-table-wrap { overflow-x:auto; }
+  .sp-results td:nth-last-child(2) { overflow:visible; text-overflow:clip; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="brand">行情仪表盘</div>
+  <div class="nav-item active" data-page="market">仪表盘</div>
+  <div class="nav-item" data-page="analysis">智能分析</div>
+  <div class="nav-item" data-page="alerts">提醒中心<span class="al-nav-badge" id="alBadge" style="display:none;">0</span></div>
+  <div class="nav-item" data-page="financials">财报分析</div>
+  <div class="nav-item" data-page="aipick">AI选股</div>
+  <div class="nav-item" data-page="config">配置</div>
+</nav>
+
+<div class="main">
+
+  <!-- ========== 行情 ========== -->
+  <div class="page active" id="page-market">
+    <div class="header">
+      <h1>市场行情仪表盘</h1>
+      <div class="time" id="clock">--</div>
+    </div>
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="updateLabel">正在加载...</span>
+    </div>
+    <div class="grid">
+      <div class="card sh" id="card-sh">
+        <div class="market-tag">SH 上证指数</div>
+        <div class="price" id="price-sh">--</div>
+        <div class="change-row">
+          <span class="change-num" id="change-sh">--</span>
+          <span class="change-pct" id="pct-sh">--</span>
+        </div>
+        <div class="detail">
+          <div><span class="label">成交量</span> <span id="vol-sh">--</span></div>
+          <div><span class="label">成交额</span> <span id="amt-sh">--</span></div>
+        </div>
+      </div>
+      <div class="card sz" id="card-sz">
+        <div class="market-tag">SZ 深证成指</div>
+        <div class="price" id="price-sz">--</div>
+        <div class="change-row">
+          <span class="change-num" id="change-sz">--</span>
+          <span class="change-pct" id="pct-sz">--</span>
+        </div>
+        <div class="detail">
+          <div><span class="label">成交量</span> <span id="vol-sz">--</span></div>
+          <div><span class="label">成交额</span> <span id="amt-sz">--</span></div>
+        </div>
+      </div>
+      <div class="card cy" id="card-cy">
+        <div class="market-tag">CY 创业板指</div>
+        <div class="price" id="price-cy">--</div>
+        <div class="change-row">
+          <span class="change-num" id="change-cy">--</span>
+          <span class="change-pct" id="pct-cy">--</span>
+        </div>
+        <div class="detail">
+          <div><span class="label">成交量</span> <span id="vol-cy">--</span></div>
+          <div><span class="label">成交额</span> <span id="amt-cy">--</span></div>
+        </div>
+      </div>
+      <div class="card hsi" id="card-hsi">
+        <div class="market-tag">HK 恒生指数</div>
+        <div class="price" id="price-hsi">--</div>
+        <div class="change-row">
+          <span class="change-num" id="change-hsi">--</span>
+          <span class="change-pct" id="pct-hsi">--</span>
+        </div>
+      </div>
+    </div>
+    <div id="kline-panel">
+      <div class="kline-head">
+        <div class="kline-title" id="kline-title">上证指数 — 分时K线</div>
+        <div class="kline-tabs">
+          <span class="kline-tab" data-scale="240">日K</span>
+          <span class="kline-tab active" data-scale="5">分时</span>
+        </div>
+      </div>
+      <div class="kline-sub" id="kline-sub">--</div>
+      <div id="kline-chart"></div>
+    </div>
+    <div class="footer">数据来源：新浪财经 · 数据仅供参考，不构成投资建议</div>
+  </div>
+
+<!-- ========== 智能分析 ========== -->
+  <div class="page" id="page-analysis">
+    <div class="header"><h1>智能分析</h1></div>
+
+    <div class="ta-search-bar">
+      <input type="text" id="taInput" class="ta-input" placeholder="输入股票代码，如：300750 / 600519 / 000001" autocomplete="off">
+      <button id="taBtn" class="ta-btn">分析</button>
+      <div class="ta-quick-tags" id="taConfigAnalysisTags">
+        <span class="cfg-hint" style="margin-right:6px;">我的自选：</span>
+      </div>
+    </div>
+
+	    <div class="ta-recommendation" id="taRecommendation" style="display:none;">
+	      <div class="ta-rec-main">
+	        <div class="ta-rec-label">综合建议</div>
+	        <div class="ta-rec-value" id="taRecValue">--</div>
+	        <div class="ta-rec-confidence">置信度 <span id="taRecConf">--</span>%</div>
+	      </div>
+	      <div class="ta-rec-breakdown" id="taRecBreakdown">
+	        <div class="ta-rec-item"><div class="rlabel">MACD</div><div class="rscore" id="taRecMACD">--</div></div>
+	        <div class="ta-rec-item"><div class="rlabel">RSI</div><div class="rscore" id="taRecRSI">--</div></div>
+	        <div class="ta-rec-item"><div class="rlabel">KDJ</div><div class="rscore" id="taRecKDJ">--</div></div>
+	        <div class="ta-rec-item"><div class="rlabel">BOLL</div><div class="rscore" id="taRecBOLL">--</div></div>
+	        <div class="ta-rec-item"><div class="rlabel">均线</div><div class="rscore" id="taRecMA">--</div></div>
+	      </div>
+	    </div>
+
+    <div class="ta-signals" id="taSignals" style="display:none;">
+      <div class="ta-signal-card" id="taSignalMACD">
+        <div class="ta-signal-label">MACD</div>
+        <div class="ta-signal-value">--</div>
+      </div>
+      <div class="ta-signal-card" id="taSignalRSI">
+        <div class="ta-signal-label">RSI(14)</div>
+        <div class="ta-signal-value">--</div>
+      </div>
+      <div class="ta-signal-card" id="taSignalKDJ">
+        <div class="ta-signal-label">KDJ</div>
+        <div class="ta-signal-value">--</div>
+      </div>
+      <div class="ta-signal-card" id="taSignalBOLL">
+        <div class="ta-signal-label">BOLL</div>
+        <div class="ta-signal-value">--</div>
+      </div>
+      <div class="ta-signal-card" id="taSignalMA">
+        <div class="ta-signal-label">均线排列</div>
+        <div class="ta-signal-value">--</div>
+      </div>
+    </div>
+
+    <div class="ta-stock-info" id="taStockInfo" style="display:none;">
+      <span class="ta-stock-name" id="taStockName">--</span>
+      <span class="ta-stock-code" id="taStockCode">--</span>
+      <span class="ta-stock-price" id="taStockPrice">--</span>
+      <span class="ta-stock-change" id="taStockChange">--</span>
+    </div>
+
+    <div id="taLoading" style="display:none;text-align:center;padding:60px 20px;">
+      <div style="font-size:32px;animation:pulse 1s infinite;">&#128269;</div>
+      <p style="color:var(--text-secondary);margin-top:12px;">正在加载K线数据...</p>
+    </div>
+
+    <div id="taError" style="display:none;text-align:center;padding:24px;color:#ef4444;"></div>
+
+    <div id="taEmpty" class="ta-empty">
+      <p class="icon">&#128200;</p>
+	      <p>输入股票代码，或在「配置」页面添加自选股后在此快速选择</p>
+      <p style="font-size:12px;margin-top:8px;color:var(--text-secondary);">支持A股（6位数字代码），基于近60个交易日K线数据</p>
+    </div>
+
+    <div id="taChartPanel" style="display:none;">
+      <div id="taChart" style="width:100%;height:780px;"></div>
+    </div>
+
+    <div class="footer">数据来源：新浪财经 · 技术指标仅供参考，不构成投资建议</div>
+  </div>
+  <!-- ========== 提醒中心 ========== -->
+  <div class="page" id="page-alerts">
+    <div class="header"><h1>提醒中心</h1></div>
+    <div class="al-toolbar">
+      <button id="alCheckBtn" class="al-check-btn">手动检测</button>
+		<button id="alAutoBtn" class="al-check-btn al-news-btn">自动监控：关</button>
+      <button id="alNewsScanBtn" class="al-check-btn al-news-btn">舆情扫描</button>
+      <span class="al-count" id="alCount">--</span>
+      <span class="al-filter-bar">
+        <span class="al-filter all active" data-filter="">全部</span>
+        <span class="al-filter" data-filter="volume">成交量</span>
+        <span class="al-filter" data-filter="amount">成交额</span>
+        <span class="al-filter" data-filter="price">价格异动</span>
+        <span class="al-filter" data-filter="halt">停牌</span>
+        <span class="al-filter" data-filter="news">舆情</span>
+        <span class="al-filter" data-filter="monitor">监控</span>
+      </span>
+      <button id="alClearBtn" class="al-clear-btn">清空</button>
+    </div>
+    <div id="alList" class="al-list">
+      <div class="al-empty">点击「手动检测」对自选股进行实时异常检测</div>
+    </div>
+  </div>
+  <div class="page" id="page-financials">
+    <div class="header"><h1>财报分析</h1></div>
+    <div class="fa-search-bar">
+	      <input type="text" id="faInput" class="fa-input" placeholder="输入公司名称或股票代码，如：宁德时代 / 300750 / 腾讯 / AAPL" autocomplete="off">
+	      <button id="faBtn" class="fa-btn">开始分析</button>
+	      <div class="fa-quick-tags">
+	        <span class="fa-tag" data-code="300750">宁德时代</span>
+	        <span class="fa-tag" data-code="000001">平安银行</span>
+	        <span class="fa-tag" data-code="600519">贵州茅台</span>
+	        <span class="fa-tag" data-code="002594">比亚迪</span>
+	        <span class="fa-tag" data-code="AAPL">Apple</span>
+	        <span class="fa-tag" data-code="0700.HK">腾讯控股</span>
+	      </div>
+	      <div class="fa-quick-tags" id="faConfigTags" style="display:none;">
+	        <span class="cfg-hint" style="margin-right:6px;">我的自选：</span>
+	      </div>
+	    </div>
+	    <div id="faLoading" style="display:none;text-align:center;padding:40px;"><div style="font-size:32px;animation:pulse 1s infinite;">&#128269;</div><p style="color:var(--text-secondary);margin-top:12px;">正在获取数据...</p></div>
+	    <div id="faError" style="display:none;text-align:center;padding:24px;color:#ef4444;"></div>
+	    <div id="faResults" style="display:none;">
+	      <div class="fa-profile-card">
+	        <div class="fa-profile-left"><div class="fa-company-name" id="faName">--</div><div class="fa-company-meta"><span id="faTicker">--</span><span class="fa-dot">·</span><span id="faIndustry">--</span></div></div>
+	        <div class="fa-profile-right"><div class="fa-val-item"><span class="fa-val-label">市值</span><span class="fa-val" id="faMcap">--</span></div><div class="fa-val-item"><span class="fa-val-label">PE</span><span class="fa-val" id="faPE">--</span></div><div class="fa-val-item"><span class="fa-val-label">PB</span><span class="fa-val" id="faPB">--</span></div></div>
+	      </div>
+	      <div class="fa-metric-grid" id="faMetricGrid"></div>
+	      <div class="fa-chart-panel"><div class="fa-chart-title">营收与利润趋势</div><div id="faChart" style="width:100%;height:360px;"></div></div>
+	      <div class="fa-section"><div class="fa-section-title">关键财务指标</div><div class="fa-table-wrap"><table id="faRatioTable"></table></div></div>
+	      <div class="fa-section"><div class="fa-section-title">最新动态</div><div id="faNewsList" class="fa-news-list"></div></div>
+	      <div class="fa-report-section">
+	        <button id="faReportBtn" class="fa-report-btn">&#128270; 生成深度分析报告</button>
+	        <p class="fa-report-hint">基于 Senior Analyst 技能框架的完整财报排雷分析</p>
+	        <div id="faReportOutput" class="fa-report-output"></div>
+	      </div>
+	    </div>
+  </div>
+  <div class="page" id="page-aipick">
+    <div class="header"><h1>AI选股</h1><span class="sp-guide-trigger" id="spGuideTrigger">评分规则 ▾</span></div>
+
+    <div class="sp-guide-dropdown" id="spGuideDropdown">
+      <table class="sp-guide-table">
+        <thead><tr><th>#</th><th>因子</th><th>加分</th><th>扣分</th><th>规则说明</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>涨跌停检测</td><td class="sp-guide-plus">+35/+20</td><td class="sp-guide-minus">-40/-25</td><td>涨幅≥9.5% +35, ≥7% +20；跌幅≤-9.5% -40, ≤-7% -25</td></tr>
+          <tr><td>2</td><td>跳空缺口</td><td class="sp-guide-plus">+15/+10</td><td class="sp-guide-minus">-20/-10</td><td>(今开-昨收)/昨收 &gt;1% +15, 0.5~1% +10；&lt;-1% -20</td></tr>
+          <tr><td>3</td><td>超跌反弹</td><td class="sp-guide-plus">+15</td><td class="sp-guide-minus">-20</td><td>前3天连跌+今日上涨 +15；前3天连跌+今日续跌 -20</td></tr>
+          <tr><td>4</td><td>量价配合</td><td class="sp-guide-plus">+20/+10</td><td class="sp-guide-minus">-25/-10</td><td>放量上涨(量比&gt;1.5) +20；缩量止跌 +10；放量下跌 -25</td></tr>
+          <tr><td>5</td><td>均线位置</td><td class="sp-guide-plus">+5×4+5</td><td class="sp-guide-minus">0</td><td>站上MA5/10/20/60各+5，多头排列额外+5（封顶20）</td></tr>
+          <tr><td>6</td><td>K线形态</td><td class="sp-guide-plus">+15/+10</td><td class="sp-guide-minus">-15/-10</td><td>锤子线+10，阳包阴+15；长上影-10，阴包阳-15</td></tr>
+          <tr><td>7</td><td>连涨连跌</td><td class="sp-guide-plus">+15/+10</td><td class="sp-guide-minus">-15/-10</td><td>连涨≥5天+15, ≥3天+10；连跌对应扣分</td></tr>
+          <tr><td>8</td><td>突破信号</td><td class="sp-guide-plus">+15/+10/+5</td><td class="sp-guide-minus">0</td><td>突破20日高点+10，突破BOLL上轨+5，两者兼具+15</td></tr>
+          <tr><td>9</td><td>量比</td><td class="sp-guide-plus">+10</td><td class="sp-guide-minus">-10/-5</td><td>量比&gt;2且上涨+10；量比&gt;2且下跌-10；量比&lt;0.5 -5</td></tr>
+          <tr><td>10</td><td>振幅</td><td class="sp-guide-plus">+5</td><td class="sp-guide-minus">-10/-5</td><td>振幅5~10% +5；&gt;10% -10；&lt;2% -5</td></tr>
+        </tbody>
+      </table>
+      <div class="sp-guide-grade">
+        <span><b>评级：</b></span>
+        <span class="sp-grade sp-grade-S">S ≥80</span>
+        <span class="sp-grade sp-grade-A">A 50~79</span>
+        <span class="sp-grade sp-grade-B">B 20~49</span>
+        <span class="sp-grade sp-grade-C">C &lt;20</span>
+      </div>
+    </div>
+
+    <div class="sp-filter-bar">
+      <div class="sp-filter-group">
+        <span class="sp-filter-label">市场：</span>
+        <span class="sp-filter active" data-fkey="market" data-fval="">全部</span>
+        <span class="sp-filter" data-fkey="market" data-fval="SH">沪市</span>
+        <span class="sp-filter" data-fkey="market" data-fval="SZ">深市</span>
+        <span class="sp-filter" data-fkey="market" data-fval="HK">港股</span>
+      </div>
+      <div class="sp-filter-group">
+        <span class="sp-filter-label">市值：</span>
+        <span class="sp-filter active" data-fkey="mcap" data-fval="100">>100亿</span>
+        <span class="sp-filter" data-fkey="mcap" data-fval="500">>500亿</span>
+        <span class="sp-filter" data-fkey="mcap" data-fval="1000">>1000亿</span>
+        <span class="sp-filter" data-fkey="mcap" data-fval="0">全部</span>
+      </div>
+      <div class="sp-filter-group">
+        <span class="sp-filter-label">板块：</span>
+        <span class="sp-filter active" data-fkey="sector" data-fval="">全部</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="金融">金融</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="科技">科技</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="消费">消费</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="医药">医药</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="制造">制造</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="能源">能源</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="材料">材料</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="地产">地产</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="交通">交通</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="传媒">传媒</span>
+        <span class="sp-filter" data-fkey="sector" data-fval="农业">农业</span>
+      </div>
+      <div class="sp-filter-group" id="spIndustryGroup">
+        <span class="sp-filter-label sp-industry-toggle" id="spIndustryToggle">行业 ▸</span>
+        <span class="sp-filter active" data-fkey="industry" data-fval="">全部</span>
+        <span class="sp-industry-list" id="spIndustryList" style="display:none;"></span>
+      </div>
+    </div>
+
+    <div class="sp-action-bar">
+      <button class="sp-btn" id="spRunBtn">开始筛选</button>
+      <span class="sp-count" id="spCount"></span>
+      <span class="sp-hint">基于近60个交易日K线数据，对全A股市场进行多因子评分排名</span>
+    </div>
+
+    <div id="spLoading" style="display:none;">
+      <div class="sp-progress-wrap">
+        <div class="sp-progress-bar" id="spProgressBar"></div>
+      </div>
+      <p class="sp-progress-text" id="spProgressText">正在分析股票...</p>
+    </div>
+    <div id="spError" style="display:none;text-align:center;padding:24px;color:#ef4444;"></div>
+
+    <div id="spEmpty" class="sp-empty">
+      <p class="icon">&#129504;</p>
+      <p>点击「开始筛选」进行AI多因子选股评分</p>
+      <p style="font-size:12px;margin-top:8px;color:var(--text-secondary);">系统将从全A股市场筛选，评分后按总分排名展示Top 20</p>
+    </div>
+
+    <div id="spResults" class="sp-results" style="display:none;">
+      <div class="sp-results-header">
+        <span class="sp-results-title" id="spResultsTitle">评分结果</span>
+      </div>
+      <div class="fa-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:38px;">排名</th>
+              <th style="width:68px;">代码</th>
+              <th style="width:84px;">名称</th>
+              <th style="width:62px;">最新价</th>
+              <th style="width:66px;">涨跌幅</th>
+              <th style="width:52px;">市值</th>
+              <th style="width:46px;">总分</th>
+              <th style="width:44px;">评级</th>
+              <th style="width:40px;">板块</th>
+              <th style="width:44px;">行业</th>
+              <th style="width:100px;">主要加分项</th>
+              <th style="width:68px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="spTableBody"></tbody>
+          <tfoot id="spMoreRow" style="display:none;"><tr><td colspan="12" style="text-align:center;padding:12px;"><button id="spMoreBtn" class="sp-more-btn">显示全部</button></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="footer">多因子评分仅供参考，不构成投资建议</div>
+  </div>
+
+  <!-- ========== 配置 ========== -->
+  <div class="page" id="page-config">
+    <div class="header"><h1>自选股配置</h1></div>
+    <div class="cfg-container">
+      <div class="cfg-add-bar">
+        <input type="text" id="cfgStockInput" class="cfg-input" placeholder="输入股票代码或名称，如：300750 / 腾讯 / AAPL" autocomplete="off">
+        <button id="cfgAddBtn" class="cfg-btn cfg-btn-add">添加</button>
+      </div>
+      <div class="cfg-quick-bar">
+        <span class="cfg-hint">快速添加：</span>
+        <span class="fa-tag" data-code="300750">宁德时代</span>
+        <span class="fa-tag" data-code="000001">平安银行</span>
+        <span class="fa-tag" data-code="600519">贵州茅台</span>
+        <span class="fa-tag" data-code="002594">比亚迪</span>
+        <span class="fa-tag" data-code="601318">中国平安</span>
+        <span class="fa-tag" data-code="600036">招商银行</span>
+      </div>
+      <div class="cfg-section">
+        <div class="cfg-section-header">
+          <span class="cfg-section-title">我的自选股</span>
+          <span class="cfg-count" id="cfgCount">0 只</span>
+          <span class="cfg-actions">
+            <button id="cfgCacheAllBtn" class="cfg-btn-sm">缓存全部</button>
+            <button id="cfgImportBtn" class="cfg-btn-sm">导入</button>
+            <button id="cfgExportBtn" class="cfg-btn-sm">导出</button>
+            <button id="cfgClearBtn" class="cfg-btn-sm cfg-btn-danger">清空</button>
+          </span>
+        </div>
+        <div class="cfg-table-wrap">
+          <table class="cfg-table">
+	            <thead><tr><th style="width:36px">#</th><th style="width:86px">代码</th><th style="width:auto">名称</th><th style="width:72px">缓存</th><th style="width:96px">操作</th></tr></thead>
+            <tbody id="cfgStockList"><tr><td colspan="6" class="cfg-empty">暂无自选股，请在上方添加</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="cfg-usage">
+        <div class="cfg-usage-title">使用说明</div>
+        <ul>
+          <li>输入代码添加自选股，或在 <strong>AI选股</strong> 评分结果中一键添加</li>
+          <li>自选股将在<strong>提醒中心</strong>中标红展示，自动参与异常监控</li>
+          <li>在<strong>财报分析</strong>页面显示自选股的快捷标签</li>
+          <li>支持 A 股（6位数字）、港股（<code>0700.HK</code>）、美股（<code>AAPL</code>）</li>
+          <li>点击<strong>缓存全部</strong>提前拉取财报数据，加速其他页面加载</li>
+          <li><strong>导出/导入</strong>可备份或迁移自选股配置</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ---- Utils ----
+function formatNum(n, dec) {
+  if (n == null || isNaN(n)) return '--';
+  return Number(n).toFixed(dec != null ? dec : 2);
+}
+function formatVol(n) {
+  if (n == null || isNaN(n)) return '--';
+  n = Number(n);
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
+  if (n >= 1e4) return (n / 1e4).toFixed(0) + ' 万';
+  return n.toFixed(0);
+}
+function formatAmt(n) {
+  if (n == null || isNaN(n)) return '--';
+  n = Number(n);
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
+  return (n / 1e4).toFixed(0) + ' 万';
+}
+function setHTML(id, text, cls, extraClass) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  if (el.textContent === text && el.className === cls) return;
+  el.textContent = text;
+  el.className = cls + (extraClass || '');
+}
+
+function updateClock() {
+  var now = new Date();
+  var el = document.getElementById('clock');
+  if (el) el.textContent = now.toLocaleDateString('zh-CN', { year:'numeric', month:'long', day:'numeric', weekday:'long' }) +
+    '  ' + now.toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+// ---- Market data ----
+var KL_NAMES = { sh:'上证指数', sz:'深证成指', cy:'创业板指', hsi:'恒生指数' };
+var KL_LABELS = { '240':'日K线', '5':'分时K线' };
+
+function updateMarketCards(data) {
+  for (var key in data) {
+    var item = data[key];
+    var cls = item.change >= 0 ? 'up' : 'down';
+    var bg  = item.change >= 0 ? 'up-bg' : 'down-bg';
+    var sign = item.change >= 0 ? '+' : '';
+    setHTML('price-'  + key, formatNum(item.price), cls);
+    setHTML('change-' + key, sign + formatNum(item.change), cls);
+    setHTML('pct-'    + key, sign + formatNum(item.pct) + '%', cls, ' ' + bg);
+    if (key !== 'hsi' && item.volume != null) {
+      setHTML('vol-' + key, formatVol(item.volume));
+      setHTML('amt-' + key, formatAmt(item.amount));
+    }
+  }
+}
+
+function updateStatus(ok) {
+  var dot = document.getElementById('statusDot');
+  var label = document.getElementById('updateLabel');
+  if (!dot || !label) return;
+  dot.classList.remove('loading','error');
+  if (ok) {
+    label.textContent = '数据更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    label.style.color = '#708090';
+  } else {
+    dot.classList.add('error');
+    label.textContent = '数据获取失败，正在重试...';
+    label.style.color = '#ef4444';
+  }
+}
+
+async function fetchMarketData() {
+  try {
+    var resp = await fetch('/api/data');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    updateMarketCards(await resp.json());
+    updateStatus(true);
+  } catch (e) { updateStatus(false); }
+}
+
+// ---- K-line ----
+var currentSymbol = 'sh';
+var currentScale = 5;
+var kchart;
+
+function filterToday(raw) {
+  var today = new Date().toISOString().slice(0, 10);
+  return raw.filter(function(d) { return d.day.indexOf(today) === 0; });
+}
+function shortTime(day) { var t = day.split(' ')[1]; return t ? t.slice(0, 5) : day; }
+function calcMA(data, period) {
+  var r = [];
+  for (var i = 0; i < data.length; i++) {
+    if (i < period - 1) { r.push(null); continue; }
+    var sum = 0; for (var j = 0; j < period; j++) sum += data[i - j][1];
+    r.push(sum / period);
+  }
+  return r;
+}
+function buildKlineData(raw) {
+  var dates = [], ohlc = [], vols = [];
+  for (var i = 0; i < raw.length; i++) {
+    var d = raw[i];
+    dates.push(d.day);
+    ohlc.push([d.open, d.close, d.low, d.high]);
+    vols.push([i, d.volume, d.close >= d.open ? 1 : -1]);
+  }
+  return { dates: dates, ohlc: ohlc, vols: vols };
+}
+
+function renderKline(raw) {
+  var isIntraday = currentScale !== 240;
+  var d = buildKlineData(raw);
+  var topSeries = [], yMin = null, yMax = null;
+
+  if (isIntraday) {
+    var lineData = [], times = [];
+    var priceMin = Infinity, priceMax = -Infinity;
+    for (var i = 0; i < d.dates.length; i++) {
+      var p = d.ohlc[i][1];
+      lineData.push(p); times.push(shortTime(d.dates[i]));
+      if (p < priceMin) priceMin = p; if (p > priceMax) priceMax = p;
+    }
+    d.dates = times;
+    var pad = Math.max((priceMax - priceMin) * 0.5, 1);
+    yMin = Math.floor(priceMin - pad); yMax = Math.ceil(priceMax + pad);
+    topSeries.push({ name:'价格',type:'line',data:lineData,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:2,color:'#36454f'},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#36454f22'},{offset:1,color:'#36454f02'}])}} );
+  } else {
+    var ma5=calcMA(d.ohlc,5),ma10=calcMA(d.ohlc,10),ma20=calcMA(d.ohlc,20);
+    topSeries.push({ name:'K线',type:'candlestick',data:d.ohlc,xAxisIndex:0,yAxisIndex:0,itemStyle:{color:'#ef4444',color0:'#22c55e',borderColor:'#ef4444',borderColor0:'#22c55e'},markPoint:{silent:true} });
+    topSeries.push({ name:'MA5',type:'line',data:ma5,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:1,color:'#36454f'} });
+    topSeries.push({ name:'MA10',type:'line',data:ma10,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:1,color:'#708090'} });
+    topSeries.push({ name:'MA20',type:'line',data:ma20,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:1,color:'#d3d3d3'} });
+  }
+
+  var yAxis0 = {type:'value',gridIndex:0,splitLine:{lineStyle:{color:'#f0f0f0'}},axisLabel:{fontSize:10,color:'#708090'}};
+  if (yMin != null) { yAxis0.min = yMin; yAxis0.max = yMax; }
+
+  var option;
+  if (isIntraday) {
+    option = { grid:[{left:60,right:20,top:20,bottom:40}], xAxis:[{type:'category',data:d.dates,gridIndex:0,axisLabel:{fontSize:10,color:'#708090',interval:Math.floor(d.dates.length/8)||0},axisLine:{lineStyle:{color:'#d3d3d3'}},axisTick:{show:false}}], yAxis:[yAxis0], series:topSeries, tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#d3d3d3',textStyle:{color:'#36454f',fontSize:12}} };
+  } else {
+    option = { grid:[{left:60,right:20,top:20,height:'62%'},{left:60,right:20,top:'78%',height:'14%'}], xAxis:[{type:'category',data:d.dates,gridIndex:0,axisLabel:{show:false},axisLine:{lineStyle:{color:'#d3d3d3'}},axisTick:{show:false}},{type:'category',data:d.dates,gridIndex:1,axisLabel:{show:true,fontSize:10,color:'#708090'},axisLine:{lineStyle:{color:'#d3d3d3'}},axisTick:{show:false}}], yAxis:[yAxis0,{type:'value',gridIndex:1,splitLine:{show:false},axisLabel:{fontSize:10,color:'#708090',formatter:function(v){return v>=1e8?(v/1e8).toFixed(1)+'亿':(v/1e4).toFixed(0)+'万'}}}], series:topSeries.concat([{name:'成交量',type:'bar',data:d.vols,xAxisIndex:1,yAxisIndex:1,itemStyle:{color:function(p){return p.data[2]>0?'#ef4444':'#22c55e'}}}]), tooltip:{trigger:'axis',axisPointer:{type:'cross'},backgroundColor:'#fff',borderColor:'#d3d3d3',textStyle:{color:'#36454f',fontSize:12}} };
+  }
+  kchart.setOption(option, true);
+}
+
+async function loadKline(symbol) {
+  try {
+    var resp = await fetch('/api/kline?symbol=' + symbol + '&scale=' + currentScale);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    var label = KL_LABELS[currentScale] || 'K线';
+    var isIntraday = currentScale !== 240;
+    if (isIntraday) {
+      data = filterToday(data);
+      if (data.length === 0) {
+        document.getElementById('kline-title').textContent = KL_NAMES[symbol] + ' — 分时K线';
+        document.getElementById('kline-sub').textContent = '今日暂无分时数据（可能尚未开盘）';
+        return;
+      }
+    }
+    document.getElementById('kline-title').textContent = KL_NAMES[symbol] + ' — ' + label;
+    document.getElementById('kline-sub').textContent = isIntraday
+      ? new Date().toISOString().slice(0,10) + ' · 共' + data.length + '条'
+      : data[0].day + ' 至 ' + data[data.length-1].day + ' · 共' + data.length + '个交易日';
+    renderKline(data);
+    kchart.resize();
+  } catch (e) {
+    document.getElementById('kline-title').textContent = 'K线数据加载失败';
+    document.getElementById('kline-sub').textContent = e.message;
+  }
+}
+
+// ---- Navigation ----
+document.querySelectorAll('.nav-item').forEach(function(nav) {
+  nav.addEventListener('click', function() {
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    this.classList.add('active');
+    var page = this.dataset.page;
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    var target = document.getElementById('page-' + page);
+    if (target) { target.classList.add('active'); }
+    if (page === 'market' && kchart) kchart.resize();
+  });
+});
+
+// ---- Tab switching ----
+document.querySelectorAll('.kline-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    var scale = parseInt(this.dataset.scale);
+    if (scale === currentScale) return;
+    currentScale = scale;
+    document.querySelectorAll('.kline-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.kline-tab[data-scale="' + scale + '"]').forEach(function(t) { t.classList.add('active'); });
+    loadKline(currentSymbol);
+  });
+});
+
+// ---- Hover card -> switch symbol ----
+document.querySelectorAll('.card').forEach(function(card) {
+  card.addEventListener('mouseenter', function() {
+    var sym = card.classList.contains('sh')?'sh':card.classList.contains('sz')?'sz':card.classList.contains('cy')?'cy':card.classList.contains('hsi')?'hsi':'';
+    if (!sym || sym === currentSymbol) return;
+    currentSymbol = sym;
+    loadKline(sym);
+  });
+});
+
+// ---- Init ----
+updateClock();
+setInterval(updateClock, 1000);
+fetchMarketData();
+setInterval(fetchMarketData, 10000);
+
+setTimeout(function() {
+  var dom = document.getElementById('kline-chart');
+  if (dom) { kchart = echarts.init(dom); loadKline('sh'); }
+}, 300);
+</script>
+
+<script src="financials.js"></script>
+<script src="config.js"></script>
+<script src="alerts.js"></script>
+
+<script src="analysis.js"></script>
+<script src="stockpick.js"></script>
+</body>
+</html>
