@@ -182,6 +182,7 @@ function cfgMarketBadge(code) {
   if (/^\d{6}$/.test(code)) {
     if (code.startsWith('6')) return '<span class="cfg-mkt-badge mkt-sh">沪</span>';
     if (code.startsWith('0') || code.startsWith('3')) return '<span class="cfg-mkt-badge mkt-sz">深</span>';
+    if (code.startsWith('5') || code.startsWith('1')) return '<span class="cfg-mkt-badge mkt-etf">ETF</span>';
     return '';
   }
   if (/\.HK$/i.test(code)) return '<span class="cfg-mkt-badge mkt-hk">港</span>';

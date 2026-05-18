@@ -312,10 +312,34 @@ function setCachedStockList(data) {
   } catch (e) { /* ignore */ }
 }
 
-async function fetchStockListPage(page, num) {
-  var resp = await fetch('/api/stock_list?page=' + page + '&num=' + num + '&sort=symbol&asc=1&node=hs_a');
+var STOCK_LIST_NODES = ['hs_a', 'etf_fund_dz'];
+
+async function fetchStockListPage(page, num, node) {
+  var resp = await fetch('/api/stock_list?page=' + page + '&num=' + num + '&sort=symbol&asc=1&node=' + (node || 'hs_a'));
   if (!resp.ok) return [];
   return await resp.json();
+}
+
+async function fetchStockListForNode(node, onProgress) {
+  var allStocks = [];
+  var page = 1, num = 100, emptyPages = 0;
+
+  while (emptyPages < 2) {
+    var pageData = await fetchStockListPage(page, num, node);
+    if (!Array.isArray(pageData) || pageData.length === 0) {
+      emptyPages++;
+      page++;
+      continue;
+    }
+    emptyPages = 0;
+    for (var i = 0; i < pageData.length; i++) {
+      allStocks.push(pageData[i]);
+    }
+    if (onProgress) onProgress('正在获取 ' + (node === 'hs_a' ? 'A股' : 'ETF') + ' 列表 第' + page + '页...', allStocks.length);
+    page++;
+  }
+
+  return allStocks;
 }
 
 async function fetchAllStockList(onProgress) {
@@ -326,21 +350,11 @@ async function fetchAllStockList(onProgress) {
   }
 
   var allStocks = [];
-  var page = 1, num = 100, emptyPages = 0;
-
-  while (emptyPages < 2) {
-    var pageData = await fetchStockListPage(page, num);
-    if (!Array.isArray(pageData) || pageData.length === 0) {
-      emptyPages++;
-      page++;
-      continue;
+  for (var n = 0; n < STOCK_LIST_NODES.length; n++) {
+    var nodeStocks = await fetchStockListForNode(STOCK_LIST_NODES[n], onProgress);
+    for (var i = 0; i < nodeStocks.length; i++) {
+      allStocks.push(nodeStocks[i]);
     }
-    emptyPages = 0;
-    for (var i = 0; i < pageData.length; i++) {
-      allStocks.push(pageData[i]);
-    }
-    if (onProgress) onProgress('正在获取股票列表 第' + page + '页...', allStocks.length);
-    page++;
   }
 
   setCachedStockList(allStocks);

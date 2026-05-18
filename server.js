@@ -66,7 +66,7 @@ function resolveStockCode(code) {
   let m = code.match(/^(SH|SZ)(\d{6})$/);
   if (m) return m[0].toLowerCase();
   m = code.match(/^(\d{6})$/);
-  if (m) return (m[1].startsWith('6') || m[1].startsWith('9') ? 'sh' : 'sz') + m[1];
+  if (m) return (m[1].startsWith('5') || m[1].startsWith('6') || m[1].startsWith('9') ? 'sh' : 'sz') + m[1];
   // Non-A-share (HK, US) — not supported by Sina stock quote endpoint
   return null;
 }
