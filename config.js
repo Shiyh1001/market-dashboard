@@ -320,30 +320,30 @@ function cfgSearch(query) {
     if (entry && entry.data) stocks = entry.data;
   } catch (e) { /* ignore */ }
 
-  if (stocks.length === 0) {
-    el.innerHTML = '<div class="cfg-search-empty">暂无股票列表缓存，请先打开 AI选股 页面加载数据</div>';
-    el.style.display = 'block';
-    return;
-  }
-
   var q = query.toUpperCase();
   var matches = [];
-  for (var i = 0; i < stocks.length; i++) {
-    var s = stocks[i];
-    var code = (s.code || s.symbol || '').toUpperCase();
-    var name = (s.name || '').toUpperCase();
-    if (code.indexOf(q) === 0 || name.indexOf(q) !== -1 || code.indexOf(q) !== -1) {
-      matches.push(s);
-      if (matches.length >= 20) break;
+
+  // Search cached stock list if available
+  if (stocks.length > 0) {
+    for (var i = 0; i < stocks.length; i++) {
+      var s = stocks[i];
+      var code = (s.code || s.symbol || '').toUpperCase();
+      var name = (s.name || '').toUpperCase();
+      if (code.indexOf(q) === 0 || name.indexOf(q) !== -1 || code.indexOf(q) !== -1) {
+        matches.push(s);
+        if (matches.length >= 20) break;
+      }
     }
   }
 
+  // If no match, offer direct add for any valid-looking code
   if (matches.length === 0) {
-    // No cache match — if input looks like a valid code, offer direct add
-    if (/^\d{6}$/.test(query) || /^(SH|SZ|sh|sz)\d{5,8}$/.test(query)) {
+    if (/^\d{6}$/.test(query) || /^(SH|SZ|sh|sz)\d{5,8}$/i.test(query)) {
       matches.push({ code: query, name: '', _direct: true });
     } else {
-      el.innerHTML = '<div class="cfg-search-empty">未找到匹配的股票</div>';
+      el.innerHTML = '<div class="cfg-search-empty">' +
+        (stocks.length === 0 ? '暂无股票列表缓存，请先打开 AI选股 页面加载数据，或直接输入代码添加' : '未找到匹配的股票') +
+        '</div>';
       el.style.display = 'block';
       return;
     }
