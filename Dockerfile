@@ -6,10 +6,12 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
 
-# ---- Python dependencies ----
+# ---- Python dependencies (Tsinghua mirror for China) ----
 COPY senior-analyst/requirements.txt ./senior-analyst/requirements.txt
-RUN pip install --no-cache-dir -r senior-analyst/requirements.txt \
-    && pip install --no-cache-dir fastapi uvicorn
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    -r senior-analyst/requirements.txt \
+    && pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    fastapi uvicorn
 
 # ---- Application code ----
 COPY . .
