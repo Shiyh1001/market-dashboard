@@ -368,6 +368,7 @@ async def stock_news(
 
 
 if __name__ == "__main__":
+    host = os.environ.get("SA_API_HOST", "127.0.0.1")
     port = int(os.environ.get("SA_API_PORT", "8765"))
-    logger.info(f"Senior Analyst API v1.7.2 on http://localhost:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    logger.info(f"Senior Analyst API v1.7.2 on http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

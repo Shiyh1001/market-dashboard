@@ -297,12 +297,6 @@ function cfgFetchSA(path) {
   });
 }
 
-function esc(str) {
-  var el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}
-
 // ---- Stock Code Search (from cached AI pick list) ----
 var cfgSearchIndex = -1;
 var cfgSearchResults = [];

@@ -5,6 +5,32 @@ const path = require('path');
 const { exec } = require('child_process');
 
 const PORT = 8080;
+const PROJECT_ROOT = path.resolve(__dirname);
+
+// ---- Rate Limiter ----
+const rateLimits = new Map();
+const RATE_LIMIT_WINDOW = 60000;  // 1 minute
+const RATE_LIMIT_MAX = 120;       // max requests per window per IP
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = rateLimits.get(ip);
+  if (!entry || (now - entry.windowStart) > RATE_LIMIT_WINDOW) {
+    entry = { windowStart: now, count: 0 };
+    rateLimits.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) return false;
+  return true;
+}
+
+// Periodically clean up stale entries
+setInterval(function() {
+  var now = Date.now();
+  rateLimits.forEach(function(entry, ip) {
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW * 2) rateLimits.delete(ip);
+  });
+}, 300000);
 const INDICES = {
   sh:  's_sh000001',
   sz:  's_sz399001',
@@ -157,7 +183,7 @@ function fetchKline(symbol, scale) {
 }
 
 // ---- Senior Analyst API proxy ----
-const SA_API = 'http://127.0.0.1:8765';
+const SA_API = process.env.SA_API_URL || 'http://127.0.0.1:8765';
 
 function proxyToSA(path, res) {
   const url = SA_API + path;
@@ -191,6 +217,17 @@ function proxyToSA(path, res) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Rate limit check for API endpoints
+  if (req.url.startsWith('/api/')) {
+    var ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    if (typeof ip === 'string' && ip.indexOf(',') !== -1) ip = ip.split(',')[0].trim();
+    if (!checkRateLimit(ip)) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Too many requests. Please slow down.' }));
+      return;
+    }
+  }
+
   // Proxy /api/sa/* to Python API
   if (req.url.startsWith('/api/sa/')) {
     const path = req.url.replace('/api/sa', '/api');
@@ -288,7 +325,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   const filePath = req.url === '/' ? '/index.html' : req.url;
-  const fullPath = path.join(__dirname, filePath);
+  const fullPath = path.resolve(__dirname, filePath);
+  // Prevent path traversal: ensure resolved path stays within project root
+  if (!fullPath.startsWith(PROJECT_ROOT + path.sep) && fullPath !== PROJECT_ROOT) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   const ext = path.extname(fullPath);
 
   try {
@@ -301,7 +344,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, '0.0.0.0', () => {
   const url = `http://localhost:${PORT}`;
   console.log(`Server running at ${url}`);
   console.log('Press Ctrl+C to stop');

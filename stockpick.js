@@ -1,3 +1,4 @@
+(function() {
 // ---- AI Stock Picking Engine ----
 // Multi-factor quantitative scoring across the full A-share market.
 // Fetches stock list from Sina, filters by market/market-cap,
@@ -36,17 +37,6 @@ function setScreenCache(market, mcap, results) {
 // ========================
 // Helpers
 // ========================
-
-function calcSMA_sp(arr, period) {
-  var result = [];
-  for (var i = 0; i < arr.length; i++) {
-    if (i < period - 1) { result.push(null); continue; }
-    var sum = 0;
-    for (var j = 0; j < period; j++) sum += arr[i - j];
-    result.push(sum / period);
-  }
-  return result;
-}
 
 function stddev(arr, start, end, mean) {
   var sumSq = 0, count = 0;
@@ -119,10 +109,10 @@ function scoreVolumePrice(bars, i) {
 
 function scoreMAPosition(bars, i) {
   var closes = bars.map(function(d) { return d.close; });
-  var ma5 = i >= 4 ? calcSMA_sp(closes, 5)[i] : null;
-  var ma10 = i >= 9 ? calcSMA_sp(closes, 10)[i] : null;
-  var ma20 = i >= 19 ? calcSMA_sp(closes, 20)[i] : null;
-  var ma60 = i >= 59 ? calcSMA_sp(closes, 60)[i] : null;
+  var ma5 = i >= 4 ? Utils.calcSMA(closes, 5)[i] : null;
+  var ma10 = i >= 9 ? Utils.calcSMA(closes, 10)[i] : null;
+  var ma20 = i >= 19 ? Utils.calcSMA(closes, 20)[i] : null;
+  var ma60 = i >= 59 ? Utils.calcSMA(closes, 60)[i] : null;
   var close = bars[i].close;
   var score = 0;
   if (ma5 !== null && close > ma5) score += 5;
@@ -181,7 +171,7 @@ function scoreBreakout(bars, i) {
   }
   var breakout20 = close > high20;
   var closes = bars.map(function(d) { return d.close; });
-  var ma20Arr = calcSMA_sp(closes, 20);
+  var ma20Arr = Utils.calcSMA(closes, 20);
   var ma20val = ma20Arr[i];
   var bollBreak = false;
   if (ma20val !== null && i >= 19) {
@@ -837,3 +827,4 @@ function initAIPick() {
 document.addEventListener('DOMContentLoaded', function() {
   initAIPick();
 });
+})();

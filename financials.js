@@ -1,3 +1,4 @@
+(function() {
 // ---- Financial Analysis ----
 var faChart = null, faCurrentCode = null;
 
@@ -241,6 +242,9 @@ function removeCacheIndicator() {
   if (elm) elm.remove();
 }
 
+// ---- DOM-dependent initialization ----
+document.addEventListener('DOMContentLoaded', function() {
+
 // Search
 el('faBtn').addEventListener('click', function() {
   var code = el('faInput').value.trim();
@@ -374,9 +378,11 @@ function generateReport(code, data) {
 // Load default stock on first visit
 var faInitialized = false;
 document.querySelector('[data-page="financials"]').addEventListener('click', function() {
-  if (!faInitialized) { faInitialized = true; runAnalysis('300750'); }
+  if (!faInitialized) { faInitialized = true; }
   renderConfigTags();
 });
+
+}); // DOMContentLoaded
 
 // ---- Render config stock tags into financials page ----
 function renderConfigTags() {
@@ -410,3 +416,4 @@ function renderConfigTags() {
     container.appendChild(tag);
   });
 }
+})();

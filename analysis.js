@@ -1,3 +1,4 @@
+(function() {
 // ---- Technical Analysis Engine ----
 // Computes MACD, RSI, KDJ, BOLL, and MAs from daily K-line data.
 // Renders multi-grid ECharts chart and signal summary cards.
@@ -10,34 +11,6 @@ var taCurrentResults = null;
 // ========================
 // Indicator Calculations
 // ========================
-
-function calcSMA(closePrices, period) {
-  var result = [];
-  for (var i = 0; i < closePrices.length; i++) {
-    if (i < period - 1) { result.push(null); continue; }
-    var sum = 0;
-    for (var j = 0; j < period; j++) sum += closePrices[i - j];
-    result.push(sum / period);
-  }
-  return result;
-}
-
-function calcEMA(data, period) {
-  var k = 2 / (period + 1);
-  var result = [];
-  for (var i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      result.push(null);
-    } else if (i === period - 1) {
-      var sum = 0;
-      for (var j = 0; j < period; j++) sum += data[j];
-      result.push(sum / period);
-    } else {
-      result.push(data[i] * k + result[i - 1] * (1 - k));
-    }
-  }
-  return result;
-}
 
 function calcEMAFromExisting(data, period) {
   // data may contain nulls; compute EMA skipping them
@@ -83,7 +56,7 @@ function calcEMAFromExisting(data, period) {
 function calcBOLL(closePrices, period, multiplier) {
   period = period || 20;
   multiplier = multiplier || 2;
-  var middle = calcSMA(closePrices, period);
+  var middle = Utils.calcSMA(closePrices, period);
   var upper = [], lower = [];
   for (var i = 0; i < closePrices.length; i++) {
     if (i < period - 1) {
@@ -103,8 +76,8 @@ function calcBOLL(closePrices, period, multiplier) {
 
 function calcMACD(closePrices, fast, slow, signal) {
   fast = fast || 12; slow = slow || 26; signal = signal || 9;
-  var emaFast = calcEMA(closePrices, fast);
-  var emaSlow = calcEMA(closePrices, slow);
+  var emaFast = Utils.calcEMA(closePrices, fast);
+  var emaSlow = Utils.calcEMA(closePrices, slow);
   var dif = [];
   for (var i = 0; i < closePrices.length; i++) {
     if (emaFast[i] == null || emaSlow[i] == null) {
@@ -190,10 +163,10 @@ function computeAllIndicators(rawData) {
   var highs  = rawData.map(function(d) { return d.high; });
   var lows   = rawData.map(function(d) { return d.low; });
   return {
-    ma5:   calcSMA(closes, 5),
-    ma10:  calcSMA(closes, 10),
-    ma20:  calcSMA(closes, 20),
-    ma60:  calcSMA(closes, 60),
+    ma5:   Utils.calcSMA(closes, 5),
+    ma10:  Utils.calcSMA(closes, 10),
+    ma20:  Utils.calcSMA(closes, 20),
+    ma60:  Utils.calcSMA(closes, 60),
     boll:  calcBOLL(closes, 20, 2),
     macd:  calcMACD(closes, 12, 26, 9),
     rsi:   calcRSI(closes, 14),
@@ -477,9 +450,9 @@ function updateSignalCard(id, label, signal) {
   valueEl.className = 'ta-signal-value ' + signal.cls;
 }
 
-function updateStockInfo(code, price, change, changePct) {
-  document.getElementById('taStockName').textContent = code;
-  document.getElementById('taStockCode').textContent = code;
+function updateStockInfo(name, price, change, changePct) {
+  document.getElementById('taStockName').textContent = name || taCurrentCode;
+  document.getElementById('taStockCode').textContent = taCurrentCode;
   document.getElementById('taStockPrice').textContent = price.toFixed(2);
   var cls = change >= 0 ? 'up' : 'down';
   var sign = change >= 0 ? '+' : '';
@@ -662,6 +635,65 @@ function setTAState(state) {
   document.getElementById('taStockInfo').style.display = (state === 'done') ? 'flex' : 'none';
 }
 
+async function resolveStockName(code) {
+  // Try FinanceCache profile first
+  var cached = FinanceCache.get(code);
+  if (cached && cached.profile) {
+    var p = cached.profile.data || cached.profile;
+    if (p.name) return p.name;
+  }
+  // Try stock list cache
+  try {
+    var slEntry = JSON.parse(localStorage.getItem('sp_stock_list_cache'));
+    if (slEntry && slEntry.data) {
+      for (var i = 0; i < slEntry.data.length; i++) {
+        if (slEntry.data[i].code === code) return slEntry.data[i].name || '';
+      }
+    }
+  } catch (e) { /* ignore */ }
+  // Try real-time quote for A-shares
+  if (/^\d{6}$/.test(code)) {
+    try {
+      var resp = await fetch('/api/stock_quotes?codes=' + encodeURIComponent(code));
+      if (resp.ok) {
+        var quotes = await resp.json();
+        if (quotes.length && quotes[0].name) return quotes[0].name;
+      }
+    } catch (e) { /* ignore */ }
+  }
+  return '';
+}
+
+function updateTASearchHeader(code, name) {
+  var nameEl = document.getElementById('taSearchName');
+  var wlBtn = document.getElementById('taSearchWlBtn');
+  if (nameEl) {
+    nameEl.textContent = name || code;
+  }
+  if (wlBtn) {
+    updateTAWlButton(code);
+  }
+}
+
+function updateTAWlButton(code) {
+  var wlBtn = document.getElementById('taSearchWlBtn');
+  if (!wlBtn) return;
+  var stocks = StockConfig.getAll();
+  var inList = false;
+  for (var i = 0; i < stocks.length; i++) {
+    if (stocks[i].code.toUpperCase() === code.toUpperCase()) { inList = true; break; }
+  }
+  if (inList) {
+    wlBtn.textContent = '★ 已自选';
+    wlBtn.className = 'ta-rec-wl-btn in-wl';
+    wlBtn.title = '已在自选列表中';
+  } else {
+    wlBtn.textContent = '+ 自选';
+    wlBtn.className = 'ta-rec-wl-btn';
+    wlBtn.title = '添加到自选';
+  }
+}
+
 async function runTAAnalysis(code) {
   if (!code) return;
   taCurrentCode = code;
@@ -683,7 +715,11 @@ async function runTAAnalysis(code) {
     var prevBar = data[data.length - 2];
     var change = prevBar ? (lastBar.close - prevBar.close) : 0;
     var changePct = prevBar ? ((change / prevBar.close) * 100) : 0;
-    updateStockInfo(code, lastBar.close, change, changePct);
+
+    // Resolve name and update header
+    var name = await resolveStockName(code);
+    updateTASearchHeader(code, name);
+    updateStockInfo(name || code, lastBar.close, change, changePct);
 
     var signals = extractSignals(indicators, data);
     updateSignalCards(signals);
@@ -747,6 +783,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.key === 'Enter') document.getElementById('taBtn').click();
   });
 
+  // Add to watchlist button
+  document.getElementById('taSearchWlBtn').addEventListener('click', function() {
+    if (!taCurrentCode) return;
+    var wlBtn = this;
+    if (wlBtn.classList.contains('in-wl')) return; // already in watchlist
+    var nameEl = document.getElementById('taSearchName');
+    var name = nameEl ? nameEl.textContent : '';
+    var ok = StockConfig.add(taCurrentCode, name);
+    if (ok) {
+      updateTAWlButton(taCurrentCode);
+      renderConfigTagsToAnalysis(); // refresh quick tags
+      if (typeof cfgToast === 'function') cfgToast('已添加自选: ' + taCurrentCode + ' ' + name);
+    } else {
+      if (typeof cfgToast === 'function') cfgToast(taCurrentCode + ' 已在自选列表中');
+      updateTAWlButton(taCurrentCode);
+    }
+  });
+
   // Lazy init on first visit
   var taInitialized = false;
   document.querySelector('[data-page="analysis"]').addEventListener('click', function() {
@@ -762,3 +816,4 @@ document.addEventListener('DOMContentLoaded', function() {
     if (taChart) taChart.resize();
   });
 });
+})();

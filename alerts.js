@@ -260,6 +260,7 @@ var AlertEngine = (function() {
 
 
 // ---- Alerts Page UI ----
+(function() {
 
 var ALERT_TYPE_LABELS = {
   volume:  { label: '成交量异常', icon: '&#128200;', cls: 'al-type-volume' },
@@ -335,23 +336,6 @@ function alRender(filterType) {
 }
 
 var alCurrentFilter = null;
-
-function fmtAlertTime(iso) {
-  if (!iso) return '';
-  var d = new Date(iso);
-  var now = new Date();
-  var diff = now - d;
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
-  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
-  return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', { hour12: false });
-}
-
-function escHTML(str) {
-  var el = document.createElement('span');
-  el.textContent = str;
-  return el.innerHTML;
-}
 
 // Manual check trigger
 var alRunning = false;
@@ -546,3 +530,4 @@ document.addEventListener('DOMContentLoaded', function() {
     AlertEngine.requestNotificationPermission();
   }, { once: true });
 });
+})();

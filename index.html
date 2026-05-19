@@ -297,6 +297,12 @@
   .ta-stock-code { font-size:13px; color:var(--text-secondary); font-family:monospace; }
   .ta-stock-price { font-size:24px; font-weight:700; color:var(--text); }
   .ta-stock-change { font-size:16px; font-weight:600; padding:2px 10px; border-radius:6px; }
+  .ta-rec-right { display:flex; flex-direction:column; align-items:center; gap:8px; margin-left:auto; padding-left:16px; border-left:1px solid var(--border); min-width:90px; }
+  .ta-rec-name { font-size:15px; font-weight:700; color:var(--text); white-space:nowrap; }
+  .ta-rec-wl-btn { padding:5px 14px; border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--text-secondary); background:transparent; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .ta-rec-wl-btn:hover { color:var(--text); border-color:var(--text); background:#f5f5f5; }
+  .ta-rec-wl-btn.in-wl { color:#ca8a04; border-color:#ca8a04; background:#fefce8; cursor:default; }
+
   .ta-empty { max-width:500px; margin:40px auto; text-align:center; color:var(--text-secondary); padding:60px 20px; }
   .ta-empty .icon { font-size:48px; margin-bottom:12px; }
   #taChartPanel { max-width:1000px; margin:0 auto; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:16px; overflow:hidden; }
@@ -468,20 +474,24 @@
       </div>
     </div>
 
-	    <div class="ta-recommendation" id="taRecommendation" style="display:none;">
-	      <div class="ta-rec-main">
-	        <div class="ta-rec-label">综合建议</div>
-	        <div class="ta-rec-value" id="taRecValue">--</div>
-	        <div class="ta-rec-confidence">置信度 <span id="taRecConf">--</span>%</div>
-	      </div>
-	      <div class="ta-rec-breakdown" id="taRecBreakdown">
-	        <div class="ta-rec-item"><div class="rlabel">MACD</div><div class="rscore" id="taRecMACD">--</div></div>
-	        <div class="ta-rec-item"><div class="rlabel">RSI</div><div class="rscore" id="taRecRSI">--</div></div>
-	        <div class="ta-rec-item"><div class="rlabel">KDJ</div><div class="rscore" id="taRecKDJ">--</div></div>
-	        <div class="ta-rec-item"><div class="rlabel">BOLL</div><div class="rscore" id="taRecBOLL">--</div></div>
-	        <div class="ta-rec-item"><div class="rlabel">均线</div><div class="rscore" id="taRecMA">--</div></div>
-	      </div>
-	    </div>
+		    <div class="ta-recommendation" id="taRecommendation" style="display:none;">
+		      <div class="ta-rec-main">
+		        <div class="ta-rec-label">综合建议</div>
+		        <div class="ta-rec-value" id="taRecValue">--</div>
+		        <div class="ta-rec-confidence">置信度 <span id="taRecConf">--</span>%</div>
+		      </div>
+		      <div class="ta-rec-breakdown" id="taRecBreakdown">
+		        <div class="ta-rec-item"><div class="rlabel">MACD</div><div class="rscore" id="taRecMACD">--</div></div>
+		        <div class="ta-rec-item"><div class="rlabel">RSI</div><div class="rscore" id="taRecRSI">--</div></div>
+		        <div class="ta-rec-item"><div class="rlabel">KDJ</div><div class="rscore" id="taRecKDJ">--</div></div>
+		        <div class="ta-rec-item"><div class="rlabel">BOLL</div><div class="rscore" id="taRecBOLL">--</div></div>
+		        <div class="ta-rec-item"><div class="rlabel">均线</div><div class="rscore" id="taRecMA">--</div></div>
+		      </div>
+		      <div class="ta-rec-right" id="taRecRight">
+		        <div class="ta-rec-name" id="taSearchName">--</div>
+		        <button class="ta-rec-wl-btn" id="taSearchWlBtn" title="加入自选">+ 自选</button>
+		      </div>
+		    </div>
 
     <div class="ta-signals" id="taSignals" style="display:none;">
       <div class="ta-signal-card" id="taSignalMACD">
@@ -758,24 +768,9 @@
 </div>
 
 <script>
-// ---- Utils ----
-function formatNum(n, dec) {
-  if (n == null || isNaN(n)) return '--';
-  return Number(n).toFixed(dec != null ? dec : 2);
-}
-function formatVol(n) {
-  if (n == null || isNaN(n)) return '--';
-  n = Number(n);
-  if (n >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
-  if (n >= 1e4) return (n / 1e4).toFixed(0) + ' 万';
-  return n.toFixed(0);
-}
-function formatAmt(n) {
-  if (n == null || isNaN(n)) return '--';
-  n = Number(n);
-  if (n >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
-  return (n / 1e4).toFixed(0) + ' 万';
-}
+(function() {
+// ---- Utils (thin wrappers, core in utils.js) ----
+function calcMA(data, period) { return Utils.calcSMA(data.map(function(d) { return d[1]; }), period); }
 function setHTML(id, text, cls, extraClass) {
   var el = document.getElementById(id);
   if (!el) return;
@@ -845,15 +840,6 @@ function filterToday(raw) {
   return raw.filter(function(d) { return d.day.indexOf(today) === 0; });
 }
 function shortTime(day) { var t = day.split(' ')[1]; return t ? t.slice(0, 5) : day; }
-function calcMA(data, period) {
-  var r = [];
-  for (var i = 0; i < data.length; i++) {
-    if (i < period - 1) { r.push(null); continue; }
-    var sum = 0; for (var j = 0; j < period; j++) sum += data[i - j][1];
-    r.push(sum / period);
-  }
-  return r;
-}
 function buildKlineData(raw) {
   var dates = [], ohlc = [], vols = [];
   for (var i = 0; i < raw.length; i++) {
@@ -974,8 +960,10 @@ setTimeout(function() {
   var dom = document.getElementById('kline-chart');
   if (dom) { kchart = echarts.init(dom); loadKline('sh'); }
 }, 300);
+})();
 </script>
 
+<script src="utils.js"></script>
 <script src="financials.js"></script>
 <script src="config.js"></script>
 <script src="alerts.js"></script>
