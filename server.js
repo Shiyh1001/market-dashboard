@@ -325,7 +325,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   const filePath = req.url === '/' ? '/index.html' : req.url;
-  const fullPath = path.resolve(__dirname, filePath);
+  const fullPath = path.join(PROJECT_ROOT, filePath);
   // Prevent path traversal: ensure resolved path stays within project root
   if (!fullPath.startsWith(PROJECT_ROOT + path.sep) && fullPath !== PROJECT_ROOT) {
     res.writeHead(403);
@@ -345,7 +345,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  const url = `http://localhost:${PORT}`;
+  const url = `http://0.0.0.0:${PORT}`;
   console.log(`Server running at ${url}`);
   console.log('Press Ctrl+C to stop');
   const cmd = process.platform === 'win32'
