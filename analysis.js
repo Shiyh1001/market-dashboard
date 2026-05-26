@@ -490,6 +490,17 @@ function renderTAChart(rawData, indicators) {
     return { value: d.volume, itemStyle: { color: d.close >= d.open ? '#ef4444' : '#22c55e' } };
   });
 
+  // Calculate price range for proper Y-axis scaling
+  var kMin = Infinity, kMax = -Infinity;
+  for (var i = 0; i < ohlc.length; i++) {
+    if (ohlc[i][2] < kMin) kMin = ohlc[i][2];
+    if (ohlc[i][3] > kMax) kMax = ohlc[i][3];
+  }
+  var kRange = kMax - kMin;
+  var kPad = Math.max(kRange * 0.08, kMax * 0.005);
+  var kYMin = Math.floor((kMin - kPad) * 100) / 100;
+  var kYMax = Math.ceil((kMax + kPad) * 100) / 100;
+
   var dom = document.getElementById('taChart');
   if (taChart) taChart.dispose();
   taChart = echarts.init(dom);
@@ -559,7 +570,7 @@ function renderTAChart(rawData, indicators) {
       { type:'category', data:dates, gridIndex:4, axisLabel:{fontSize:10,color:'#708090',interval:Math.floor(n/8)||0}, axisTick:{show:false}, axisLine:{lineStyle:{color:'#d3d3d3'}} },
     ],
     yAxis: [
-      { type:'value', gridIndex:0, scale:true, splitLine:{lineStyle:{color:'#f0f0f0'}}, axisLabel:{fontSize:10,color:'#708090',formatter:function(v){return v.toFixed(0)}} },
+      { type:'value', gridIndex:0, min:kYMin, max:kYMax, splitLine:{lineStyle:{color:'#f0f0f0'}}, axisLabel:{fontSize:10,color:'#708090',formatter:function(v){return v.toFixed(0)}} },
       { type:'value', gridIndex:1, splitLine:{show:false}, axisLabel:{fontSize:9,color:'#708090',formatter:function(v){return v>=1e8?(v/1e8).toFixed(1)+'亿':(v/1e4).toFixed(0)+'万'}} },
       { type:'value', gridIndex:2, splitLine:{lineStyle:{color:'#f0f0f0'}}, axisLabel:{fontSize:10,color:'#708090',formatter:function(v){return v.toFixed(2)}} },
       { type:'value', gridIndex:3, min:0, max:100, interval:25, splitLine:{lineStyle:{color:'#f0f0f0'}}, axisLabel:{fontSize:10,color:'#708090',formatter:function(v){return v.toFixed(0)}} },

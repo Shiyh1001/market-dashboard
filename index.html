@@ -856,17 +856,25 @@ function renderKline(raw) {
   var d = buildKlineData(raw);
   var topSeries = [], yMin = null, yMax = null;
 
+  // Calculate price range from actual OHLC data for proper Y-axis scaling
+  var priceMin = Infinity, priceMax = -Infinity;
+  for (var i = 0; i < d.ohlc.length; i++) {
+    var lo = d.ohlc[i][2], hi = d.ohlc[i][3];
+    if (lo < priceMin) priceMin = lo;
+    if (hi > priceMax) priceMax = hi;
+  }
+  var pRange = priceMax - priceMin;
+  var pPad = Math.max(pRange * 0.08, priceMax * 0.005);
+  yMin = Math.floor((priceMin - pPad) * 100) / 100;
+  yMax = Math.ceil((priceMax + pPad) * 100) / 100;
+
   if (isIntraday) {
     var lineData = [], times = [];
-    var priceMin = Infinity, priceMax = -Infinity;
     for (var i = 0; i < d.dates.length; i++) {
       var p = d.ohlc[i][1];
       lineData.push(p); times.push(shortTime(d.dates[i]));
-      if (p < priceMin) priceMin = p; if (p > priceMax) priceMax = p;
     }
     d.dates = times;
-    var pad = Math.max((priceMax - priceMin) * 0.5, 1);
-    yMin = Math.floor(priceMin - pad); yMax = Math.ceil(priceMax + pad);
     topSeries.push({ name:'价格',type:'line',data:lineData,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:2,color:'#36454f'},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#36454f22'},{offset:1,color:'#36454f02'}])}} );
   } else {
     var ma5=calcMA(d.ohlc,5),ma10=calcMA(d.ohlc,10),ma20=calcMA(d.ohlc,20);
@@ -876,8 +884,7 @@ function renderKline(raw) {
     topSeries.push({ name:'MA20',type:'line',data:ma20,xAxisIndex:0,yAxisIndex:0,smooth:true,symbol:'none',lineStyle:{width:1,color:'#d3d3d3'} });
   }
 
-  var yAxis0 = {type:'value',gridIndex:0,splitLine:{lineStyle:{color:'#f0f0f0'}},axisLabel:{fontSize:10,color:'#708090'}};
-  if (yMin != null) { yAxis0.min = yMin; yAxis0.max = yMax; }
+  var yAxis0 = {type:'value',gridIndex:0,splitLine:{lineStyle:{color:'#f0f0f0'}},axisLabel:{fontSize:10,color:'#708090'},min:yMin,max:yMax};
 
   var option;
   if (isIntraday) {
