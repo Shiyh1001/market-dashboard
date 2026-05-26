@@ -5,7 +5,7 @@ A 股/港股实时行情仪表盘，支持指数监控、个股查询、K 线图
 ## 仓库结构
 
 ```
-├── web-dashboard/                  # Node.js 前端仪表盘（端口 8080）
+├── market-dashboard/               # Node.js 前端仪表盘（端口 8080）
 │   ├── index.html                 # 前端页面
 │   ├── server.js                  # Node.js 后端
 │   ├── analysis.js / alerts.js    # 分析 & 异动提醒
@@ -25,7 +25,7 @@ A 股/港股实时行情仪表盘，支持指数监控、个股查询、K 线图
 
 ```bash
 # 仪表盘
-cd web-dashboard
+cd market-dashboard
 npm install
 node server.js
 # 访问 http://localhost:8080
